@@ -224,7 +224,7 @@ tokenizer = BertTokenizer.from_pretrained(
 # 1: VQA, 2: GenomeQA, 4: Visual7w, 7: Retrieval COCO, 8: Retrieval Flickr30k 
 # 9: refcoco, 10: refcoco+ 11: refcocog, 12: NLVR2, 13: VisualEntailment, 15: GQA, 16: GuessWhat, 
 
-def test ():
+def test_multiple():
     image_path = 'demo/1.jpg'
     feature1, info1 = feature_extractor.extract_features(image_path)
     feature2, info2 = feature_extractor.extract_features(image_path)
@@ -269,6 +269,57 @@ def test ():
     task = torch.stack(task_list)
     print("Run Predictions")
     prediction(text, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task)
+
+def test_single():
+    image_path = 'demo/1.jpg'
+    features, infos = feature_extractor.extract_features(image_path)
+
+    img = PIL.Image.open(image_path).convert('RGB')
+    img = torch.tensor(np.array(img))
+
+    plt.axis('off')
+    plt.imshow(img)
+    plt.show()
+        
+    query = "swimming elephant"
+    in_task = [9]
+    question, features, spatials, segment_ids, input_mask, image_mask, \
+            co_attention_mask, task = custom_prediction(query, in_task, features, infos)
+
+    print("Run Predictions")
+    vision_prediction, vision_logit, linguisic_prediction, linguisic_logit, attn_data_list, pooled_output_t, pooled_output_v = model(
+        question, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task, output_all_attention_masks=True
+    )
+    height, width = img.shape[0], img.shape[1]
+    print("Here are the Text & Visual Embeddings from VilBERT: %s  %s" %(pooled_output_t.shape, pooled_output_v.shape))
+    # Grounding: 
+    logits_vision = torch.max(vision_logit, 1)[1].data
+    grounding_val, grounding_idx = torch.sort(vision_logit.view(-1), 0, True)
+    examples_per_row = 5
+    ncols = examples_per_row 
+    nrows = 1
+    figsize = [12, ncols*20]     # Figure size, inches
+    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+
+    for i, axi in enumerate(ax.flat):
+        idx = grounding_idx[i]
+        val = grounding_val[i]
+        box = spatials[0][idx][:4].tolist()
+        y1 = int(box[1] * height)
+        y2 = int(box[3] * height)
+        x1 = int(box[0] * width)
+        x2 = int(box[2] * width)
+        patch = img[y1:y2,x1:x2]
+        axi.imshow(patch)
+        axi.axis('off')
+        axi.set_title(str(i) + ": " + str(val.item()))
+
+    plt.axis('off')
+    plt.tight_layout(True)
+    plt.show()  
+
+
+test_single()
 
 def run_vilbert(image_paths, queries):
     features, infos = feature_extractor.extract_features(image_paths)
