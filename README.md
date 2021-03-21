@@ -34,11 +34,19 @@ conda activate vilbert-mt
 git clone --recursive https://github.com/facebookresearch/vilbert-multi-task.git
 cd vilbert-multi-task
 pip install -r requirements.txt
+
 ```
 
-2. Install pytorch
+2. Install dependencies
 ```
-conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
+cd tools/refer
+python setup.py install
+
+cd depends/cocoapi/PythonAPI
+python setup.py build_ext install
+
+cd depends/vqa-maskrcnn-benchmark
+python setup.py build develop
 ```
 
 3. Install apex, follows https://github.com/NVIDIA/apex
@@ -47,6 +55,18 @@ conda install pytorch torchvision cudatoolkit=10.0 -c pytorch
 ```text
 python setup.py develop
 ```
+
+5. Download existing models
+```text
+cd data
+wget https://dl.fbaipublicfiles.com/vilbert-multi-task/detectron_model.pth
+wget https://dl.fbaipublicfiles.com/vilbert-multi-task/detectron_config.yaml
+
+wget https://dl.fbaipublicfiles.com/vilbert-multi-task/pretrained_model.bin
+wget https://dl.fbaipublicfiles.com/vilbert-multi-task/multi_task_model.bin
+
+```
+
 
 ## Data Setup
 

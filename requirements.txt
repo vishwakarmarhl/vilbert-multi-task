@@ -1,9 +1,6 @@
-pytorch-transformers==1.0.0
-numpy==1.16.4
+pytorch-transformers
+numpy
 lmdb==0.94
-tensorboardX==1.2
-tensorflow==2.4.0
-tensorpack==0.9.4
 tqdm==4.31.1
 easydict==1.9
 PyYAML==5.1.2
@@ -15,3 +12,14 @@ python-prctl
 msgpack
 msgpack-numpy
 opencv-python==4.2.0.34
+scikit-image
+yacs
+tensorflow
+tensorboardX 
+tensorflow 
+tensorpack
+
+-f https://download.pytorch.org/whl/torch_stable.html 
+torch==1.7.1+cu110 
+-f https://download.pytorch.org/whl/torch_stable.html
+torchvision==0.8.2+cu110

@@ -20,24 +20,26 @@ from maskrcnn_benchmark.modeling.detector import build_detection_model
 from maskrcnn_benchmark.structures.image_list import to_image_list
 from maskrcnn_benchmark.utils.model_serialization import load_state_dict
 
-
 class FeatureExtractor:
     MAX_SIZE = 1333
     MIN_SIZE = 800
 
-    def __init__(self):
-        self.args = self.get_parser().parse_args()
+    def __init__(self, parser=None):
+        if parser is not None:
+            self.args = parser
+        else:
+            self.args = self.get_parser().parse_args()
+            os.makedirs(self.args.output_folder, exist_ok=True)
         self.detection_model = self._build_detection_model()
-
-        os.makedirs(self.args.output_folder, exist_ok=True)
+        
 
     def get_parser(self):
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            "--model_file", default=None, type=str, help="Detectron model file"
+            "--model_file", default="data/detectron_model.pth", type=str, help="Detectron model file"
         )
         parser.add_argument(
-            "--config_file", default=None, type=str, help="Detectron config file"
+            "--config_file", default="data/detectron_config.yaml", type=str, help="Detectron config file"
         )
         parser.add_argument("--batch_size", type=int, default=2, help="Batch size")
         parser.add_argument(
@@ -125,7 +127,7 @@ class FeatureExtractor:
         score_list = [torch.nn.functional.softmax(x, -1) for x in score_list]
         feats = output[0][feature_name].split(n_boxes_per_image)
         cur_device = score_list[0].device
-
+        print("Features :", feats)
         feat_list = []
         info_list = []
 
@@ -187,6 +189,7 @@ class FeatureExtractor:
 
         with torch.no_grad():
             output = self.detection_model(current_img_list)
+            print("Detectron Output Shape: ",output[0].keys())
 
         feat_list = self._process_feature_extraction(
             output,
@@ -214,7 +217,10 @@ class FeatureExtractor:
     def extract_features(self):
         image_dir = self.args.image_dir
         if os.path.isfile(image_dir):
+            print("Image File: ", image_dir)
             features, infos = self.get_detectron_features([image_dir])
+            print("Image Features: ", features)
+            print("Image Infos: ", infos)
             self._save_feature(image_dir, features[0], infos[0])
         else:
             files = glob.glob(os.path.join(image_dir, "*"))
@@ -222,12 +228,17 @@ class FeatureExtractor:
             # files = [files[i: i+1000] for i in range(0, len(files), 1000)][self.args.partition]
             for chunk in self._chunks(files, self.args.batch_size):
                 try:
+                    print("Image File list: ", chunk)
                     features, infos = self.get_detectron_features(chunk)
+                    print("Image Features : ", len(features))
                     for idx, file_name in enumerate(chunk):
                         self._save_feature(file_name, features[idx], infos[idx])
                 except BaseException:
                     continue
 
+    def extract_features(self, image_path):
+        features, infos = self.get_detectron_features([image_path])
+        return features, infos
 
 if __name__ == "__main__":
     feature_extractor = FeatureExtractor()

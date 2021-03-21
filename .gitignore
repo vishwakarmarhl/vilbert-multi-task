@@ -34,6 +34,7 @@ MANIFEST
 
 # Datasets and preprocessed files
 data/
+datasets/
 save/
 logs/
 results/
@@ -47,3 +48,8 @@ checkpoints/
 # virtualenv
 venv/
 ENV/
+
+# Data files
+.pth
+.bin
+.zip
