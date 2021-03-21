@@ -60,8 +60,33 @@ def prediction(question, features, spatials, segment_ids, input_mask, image_mask
         question, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task_tokens, output_all_attention_masks=True
     )
     height, width = img.shape[0], img.shape[1]
-    #print("Here are the Text & Visual Embeddings from VilBERT: %s  %s" %(pooled_output_t.shape, pooled_output_v.shape))
-    return pooled_output_t, pooled_output_v
+    print("Here are the Text & Visual Embeddings from VilBERT: %s  %s" %(pooled_output_t.shape, pooled_output_v.shape))
+    # Grounding: 
+    logits_vision = torch.max(vision_logit, 1)[1].data
+    grounding_val, grounding_idx = torch.sort(vision_logit.view(-1), 0, True)
+    examples_per_row = 5
+    ncols = examples_per_row 
+    nrows = 1
+    figsize = [12, ncols*20]     # Figure size, inches
+    fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+
+    for i, axi in enumerate(ax.flat):
+        idx = grounding_idx[i]
+        val = grounding_val[i]
+        box = spatials[0][idx][:4].tolist()
+        y1 = int(box[1] * height)
+        y2 = int(box[3] * height)
+        x1 = int(box[0] * width)
+        x2 = int(box[2] * width)
+        patch = img[y1:y2,x1:x2]
+        axi.imshow(patch)
+        axi.axis('off')
+        axi.set_title(str(i) + ": " + str(val.item()))
+
+    plt.axis('off')
+    plt.tight_layout(True)
+    plt.show()  
+
 
 def custom_prediction(query, task, features, infos):
 
@@ -126,7 +151,6 @@ def custom_prediction(query, task, features, infos):
 # =============================
 # ViLBERT part
 # =============================
-
 model_file = "data/detectron_model.pth"
 config_file = "data/detectron_config.yaml"
 
@@ -224,77 +248,48 @@ tokenizer = BertTokenizer.from_pretrained(
 # 1: VQA, 2: GenomeQA, 4: Visual7w, 7: Retrieval COCO, 8: Retrieval Flickr30k 
 # 9: refcoco, 10: refcoco+ 11: refcocog, 12: NLVR2, 13: VisualEntailment, 15: GQA, 16: GuessWhat, 
 
-def test ():
-    image_path = 'demo/1.jpg'
-    feature1, info1 = feature_extractor.extract_features(image_path)
-    feature2, info2 = feature_extractor.extract_features(image_path)
-    features = [feature1, feature2]
-    infos = [info1, info2]
 
-    img = PIL.Image.open(image_path).convert('RGB')
-    img = torch.tensor(np.array(img))
+image_path = 'demo/1.jpg'
+feature1, info1 = feature_extractor.extract_features(image_path)
+feature2, info2 = feature_extractor.extract_features(image_path)
+features = [feature1, feature2]
+infos = [info1, info2]
 
-    plt.axis('off')
-    plt.imshow(img)
-    plt.show()
-        
-    query1 = "swimming elephant"
-    query2 = "swiming elephnt"
-    queries = [query1, query2]
-    in_task = [9]
+img = PIL.Image.open(image_path).convert('RGB')
+img = torch.tensor(np.array(img))
 
-    text_list, feature_list, spatial_list, segment_ids_list = [],[],[],[] 
-    input_mask_list, image_mask_list, co_attention_mask_list, task_list  = [],[],[],[]
+plt.axis('off')
+plt.imshow(img)
+plt.show()
+    
+query1 = "swimming elephant"
+query2 = "swiming elephnt"
+queries = [query1, query2]
+in_task = [9]
 
-    print("prepare Batch")
-    for query, feat, info in zip (queries, features, infos):
-        text, features, spatials, segment_ids, input_mask, image_mask, \
-            co_attention_mask, task = custom_prediction(query, in_task, feat, info)
-        text_list.append(text[0])
-        feature_list.append(features[0])
-        spatial_list.append(spatials[0])
-        segment_ids_list.append(segment_ids[0])
-        input_mask_list.append(input_mask[0])
-        image_mask_list.append(image_mask[0])
-        co_attention_mask_list.append(co_attention_mask[0])
-        task_list.append(task[0])
-        
-    text = torch.stack(text_list)
-    features = torch.stack(feature_list)
-    spatials = torch.stack(spatial_list)
-    segment_ids = torch.stack(segment_ids_list)
-    input_mask = torch.stack(input_mask_list)
-    image_mask = torch.stack(image_mask_list)
-    co_attention_mask = torch.stack(co_attention_mask_list)
-    task = torch.stack(task_list)
-    print("Run Predictions")
-    prediction(text, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task)
+text_list, feature_list, spatial_list, segment_ids_list = [],[],[],[] 
+input_mask_list, image_mask_list, co_attention_mask_list, task_list  = [],[],[],[]
 
-def run_vilbert(image_paths, queries):
-    features, infos = feature_extractor.extract_features(image_paths)
-
-    text_list, feature_list, spatial_list, segment_ids_list = [],[],[],[] 
-    input_mask_list, image_mask_list, co_attention_mask_list, task_list  = [],[],[],[]
-    in_task = [9]
-    for query, feat, info in zip (queries, features, infos):
-        text, features, spatials, segment_ids, input_mask, image_mask, \
-            co_attention_mask, task = custom_prediction(query, in_task, feat, info)
-        text_list.append(text[0])
-        feature_list.append(features[0])
-        spatial_list.append(spatials[0])
-        segment_ids_list.append(segment_ids[0])
-        input_mask_list.append(input_mask[0])
-        image_mask_list.append(image_mask[0])
-        co_attention_mask_list.append(co_attention_mask[0])
-        task_list.append(task[0])
-    # Stacking for creating batch
-    text = torch.stack(text_list)
-    features = torch.stack(feature_list)
-    spatials = torch.stack(spatial_list)
-    segment_ids = torch.stack(segment_ids_list)
-    input_mask = torch.stack(input_mask_list)
-    image_mask = torch.stack(image_mask_list)
-    co_attention_mask = torch.stack(co_attention_mask_list)
-    task = torch.stack(task_list)
-    #print("Run Predictions")
-    txt_embeds, img_embeds = prediction(text, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task)
+print("prepare Batch")
+for query, feat, info in zip (queries, features, infos):
+    text, features, spatials, segment_ids, input_mask, image_mask, \
+         co_attention_mask, task = custom_prediction(query, in_task, feat, info)
+    text_list.append(text[0])
+    feature_list.append(features[0])
+    spatial_list.append(spatials[0])
+    segment_ids_list.append(segment_ids[0])
+    input_mask_list.append(input_mask[0])
+    image_mask_list.append(image_mask[0])
+    co_attention_mask_list.append(co_attention_mask[0])
+    task_list.append(task[0])
+    
+text = torch.stack(text_list)
+features = torch.stack(feature_list)
+spatials = torch.stack(spatial_list)
+segment_ids = torch.stack(segment_ids_list)
+input_mask = torch.stack(input_mask_list)
+image_mask = torch.stack(image_mask_list)
+co_attention_mask = torch.stack(co_attention_mask_list)
+task = torch.stack(task_list)
+print("Run Predictions")
+prediction(text, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task)
