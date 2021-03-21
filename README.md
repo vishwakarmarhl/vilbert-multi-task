@@ -50,7 +50,11 @@ python setup.py build develop
 ```
 
 3. Install apex, follows https://github.com/NVIDIA/apex
+```text
+cd depends/apex
+pip install -v --disable-pip-version-check --no-cache-dir --global-option="--cpp_ext" --global-option="--cuda_ext" ./
 
+```
 4. Install this codebase as a package in this environment.
 ```text
 python setup.py develop

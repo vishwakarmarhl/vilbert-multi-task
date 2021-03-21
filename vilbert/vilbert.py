@@ -1722,17 +1722,109 @@ class SimpleClassifier(nn.Module):
         return self.logit_fc(hidden_states)
 
 
-# class SimpleClassifier(nn.Module):
-#     def __init__(self, in_dim, hid_dim, out_dim, dropout):
-#         super(SimpleClassifier, self).__init__()
-#         layers = [
-#             weight_norm(nn.Linear(in_dim, hid_dim), dim=None),
-#             nn.ReLU(),
-#             nn.Dropout(dropout, inplace=True),
-#             weight_norm(nn.Linear(hid_dim, out_dim), dim=None)
-#         ]
-#         self.main = nn.Sequential(*layers)
+class VILBertForVLTasksCustom(BertPreTrainedModel):
+    def __init__(self, config, num_labels, dropout_prob=0.1, default_gpu=True):
+        super(VILBertForVLTasksCustom, self).__init__(config)
+        self.num_labels = num_labels
 
-#     def forward(self, x):
-#         logits = self.main(x)
-#         return logits
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(dropout_prob)
+        self.cls = BertPreTrainingHeads(
+            config, self.bert.embeddings.word_embeddings.weight
+        )
+        self.vil_prediction = SimpleClassifier(
+            config.bi_hidden_size, config.bi_hidden_size * 2, 3129, 0.5
+        )
+        self.vil_prediction_gqa = SimpleClassifier(
+            config.bi_hidden_size, config.bi_hidden_size * 2, 1533, 0.5
+        )
+        self.vil_binary_prediction = SimpleClassifier(
+            config.bi_hidden_size * 2, config.bi_hidden_size * 2, 2, 0.5
+        )
+        self.vil_logit = nn.Linear(config.bi_hidden_size, 1)
+        self.vil_tri_prediction = nn.Linear(
+            config.bi_hidden_size, 3
+        )  # for Visual Entailiment tasks
+        self.vision_logit = nn.Linear(config.v_hidden_size, 1)
+        self.linguisic_logit = nn.Linear(config.hidden_size, 1)
+        self.fusion_method = config.fusion_method
+        self.apply(self.init_weights)
+
+        self.tie_weights()
+
+    def tie_weights(self):
+        """ Make sure we are sharing the input and output embeddings.
+            Export to TorchScript can't handle parameter sharing so we are cloning them instead.
+        """
+        self._tie_or_clone_weights(
+            self.cls.predictions.decoder, self.bert.embeddings.word_embeddings
+        )
+
+    def forward(
+        self,
+        input_txt,
+        input_imgs,
+        image_loc,
+        token_type_ids=None,
+        attention_mask=None,
+        image_attention_mask=None,
+        co_attention_mask=None,
+        task_ids=None,
+        output_all_encoded_layers=False,
+        output_all_attention_masks=False,
+    ):
+
+        sequence_output_t, sequence_output_v, pooled_output_t, pooled_output_v, all_attention_mask = self.bert(
+            input_txt,
+            input_imgs,
+            image_loc,
+            token_type_ids,
+            attention_mask,
+            image_attention_mask,
+            co_attention_mask,
+            task_ids,
+            output_all_encoded_layers=output_all_encoded_layers,
+            output_all_attention_masks=output_all_attention_masks,
+        )
+
+        vil_prediction = 0
+        vil_logit = 0
+        vil_binary_prediction = 0
+        vision_prediction = 0
+        vision_logit = 0
+        linguisic_prediction = 0
+        linguisic_logit = 0
+
+        linguisic_prediction, vision_prediction, vil_binary_prediction = self.cls(
+            sequence_output_t, sequence_output_v, pooled_output_t, pooled_output_v
+        )
+
+        if self.fusion_method == "sum":
+            pooled_output = self.dropout(pooled_output_t + pooled_output_v)
+        elif self.fusion_method == "mul":
+            pooled_output = self.dropout(pooled_output_t * pooled_output_v)
+        else:
+            assert False
+
+        vil_prediction = self.vil_prediction(pooled_output)
+        vil_prediction_gqa = self.vil_prediction_gqa(pooled_output)
+        if pooled_output.size(0) % 2 == 0:
+            vil_binary_prediction = self.vil_binary_prediction(
+                pooled_output.view(-1, pooled_output.size(1) * 2)
+            )
+        vil_logit = self.vil_logit(pooled_output)
+        vil_tri_prediction = self.vil_tri_prediction(pooled_output)
+        vision_logit = self.vision_logit(self.dropout(sequence_output_v)) + (
+            (1.0 - image_attention_mask) * -10000.0
+        ).unsqueeze(2).to(dtype=next(self.parameters()).dtype)
+        linguisic_logit = self.linguisic_logit(self.dropout(sequence_output_t))
+
+        return (
+            vision_prediction,
+            vision_logit,
+            linguisic_prediction,
+            linguisic_logit,
+            all_attention_mask,
+            pooled_output_t, 
+            pooled_output_v
+        )

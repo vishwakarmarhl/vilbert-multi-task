@@ -7,6 +7,7 @@ from easydict import EasyDict as edict
 from pytorch_transformers.tokenization_bert import BertTokenizer
 from vilbert.datasets import ConceptCapLoaderTrain, ConceptCapLoaderVal
 from vilbert.vilbert import VILBertForVLTasks, BertConfig, BertForMultiModalPreTraining
+from vilbert.vilbert import VILBertForVLTasksCustom
 from vilbert.task_utils import LoadDatasetEval
 
 import numpy as np
@@ -59,48 +60,18 @@ import _pickle as cPickle
 
 def prediction(question, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task_tokens, ):
 
-    vil_prediction, vil_prediction_gqa, vil_logit, vil_binary_prediction, vil_tri_prediction, vision_prediction, vision_logit, linguisic_prediction, linguisic_logit, attn_data_list = model(
+    vision_prediction, vision_logit, linguisic_prediction, linguisic_logit, attn_data_list, pooled_output_t, pooled_output_v = model(
         question, features, spatials, segment_ids, input_mask, image_mask, co_attention_mask, task_tokens, output_all_attention_masks=True
     )
-    
     height, width = img.shape[0], img.shape[1]
-
-    logits = torch.max(vil_prediction, 1)[1].data  # argmax
-    # Load VQA label to answers:
-    label2ans_path = os.path.join('save', "VQA" ,"cache", "trainval_label2ans.pkl")
-    vqa_label2ans = cPickle.load(open(label2ans_path, "rb"))
-    answer = vqa_label2ans[logits[0].item()]
-    print("VQA: " + answer)
-
-    # Load GQA label to answers:
-    label2ans_path = os.path.join('save', "gqa" ,"cache", "trainval_label2ans.pkl")
-
-    logtis_gqa = torch.max(vil_prediction_gqa, 1)[1].data
-    gqa_label2ans = cPickle.load(open(label2ans_path, "rb"))
-    answer = gqa_label2ans[logtis_gqa[0].item()]
-    print("GQA: " + answer)
-
-    # vil_binary_prediction NLVR2, 0: False 1: True Task 12
-    logtis_binary = torch.max(vil_binary_prediction, 1)[1].data
-    print("NLVR: " + str(logtis_binary.item()))
-
-    # vil_entaliment:  
-    label_map = {0:"contradiction", 1:"neutral", 2:"entailment"}
-    logtis_tri = torch.max(vil_tri_prediction, 1)[1].data
-    print("Entaliment: " + str(label_map[logtis_tri.item()]))
-
-    # vil_logit: 
-    logits_vil = vil_logit[0].item()
-    print("ViL_logit: %f" %logits_vil)
-
-    # grounding: 
+    print("Here are the Text & Visual Embeddings from VilBERT: %s  %s" %(pooled_output_t.shape, pooled_output_v.shape))
+    # Grounding: 
     logits_vision = torch.max(vision_logit, 1)[1].data
     grounding_val, grounding_idx = torch.sort(vision_logit.view(-1), 0, True)
-
     examples_per_row = 5
     ncols = examples_per_row 
     nrows = 1
-    figsize = [12, ncols*20]     # figure size, inches
+    figsize = [12, ncols*20]     # Figure size, inches
     fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
 
     for i, axi in enumerate(ax.flat):
@@ -266,7 +237,7 @@ if args.baseline:
         args.from_pretrained, config=config, num_labels=num_labels, default_gpu=default_gpu
         )
 else:
-    model = VILBertForVLTasks.from_pretrained(
+    model = VILBertForVLTasksCustom.from_pretrained(
         args.from_pretrained, config=config, num_labels=num_labels, default_gpu=default_gpu
         )
     
